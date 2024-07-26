@@ -19,7 +19,7 @@ def lambda_handler(event, context):
     bedrock_response = client_bedrock.invoke_model(
         contentType = 'application/json',
         accept = 'application/json',
-        modelID = 'stability.stable-diffusion-xl-v1',
+        modelId = 'stability.stable-diffusion-xl-v1',
         body=json.dumps({"text_prompts": [{"text": prompt}],
                          "cfg_scale": 10,
                          "steps": 30,
