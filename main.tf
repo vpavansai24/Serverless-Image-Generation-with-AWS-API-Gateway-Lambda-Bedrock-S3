@@ -2,9 +2,13 @@ provider "aws" {
   region = "us-east-1"  # Change to your desired AWS region
 }
 
+# Fetch information about the current AWS account
+data "aws_caller_identity" "current" {}
+
 # Define the S3 bucket
 resource "aws_s3_bucket" "image_bucket" {
   bucket = "image-generation-2024-07-25"
+  force_destroy = true
 }
 
 # Create IAM Role for Lambda
@@ -105,3 +109,75 @@ resource "aws_lambda_function" "example_lambda" {
   ]
 }
 
+# Create API Gateway REST API
+resource "aws_api_gateway_rest_api" "example_api" {
+  name        = var.api_name
+  description = "API Gateway for Lambda Integration"
+}
+
+# Create API Gateway Resource
+resource "aws_api_gateway_resource" "example_resource" {
+  parent_id   = aws_api_gateway_rest_api.example_api.root_resource_id
+  path_part   = var.endpoint_path
+  rest_api_id = aws_api_gateway_rest_api.example_api.id
+}
+
+# Create API Gateway Method
+resource "aws_api_gateway_method" "example_method" {
+  authorization = "NONE"
+  http_method   = "GET"
+  resource_id   = aws_api_gateway_resource.example_resource.id
+  rest_api_id   = aws_api_gateway_rest_api.example_api.id
+}
+
+# Create API Gateway Integration
+resource "aws_api_gateway_integration" "example_integration" {
+  http_method             = aws_api_gateway_method.example_method.http_method
+  resource_id             = aws_api_gateway_resource.example_resource.id
+  rest_api_id             = aws_api_gateway_rest_api.example_api.id
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.example_lambda.invoke_arn
+
+  depends_on = [
+    aws_lambda_function.example_lambda
+  ]
+}
+
+
+# Grant API Gateway permission to invoke Lambda
+resource "aws_lambda_permission" "api_gateway_permission" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.example_lambda.function_name
+  principal     = "apigateway.amazonaws.com"
+  
+  source_arn = "arn:aws:execute-api:${var.myregion}:${data.aws_caller_identity.current.account_id}:${aws_api_gateway_rest_api.example_api.id}/*/${aws_api_gateway_method.example_method.http_method}${aws_api_gateway_resource.example_resource.path}"
+}
+
+
+# Create API Gateway Deployment
+resource "aws_api_gateway_deployment" "example_deployment" {
+  rest_api_id = aws_api_gateway_rest_api.example_api.id
+
+  triggers = {
+    redeployment = sha1(jsonencode([
+      aws_api_gateway_resource.example_resource.id,
+      aws_api_gateway_method.example_method.id,
+      aws_api_gateway_integration.example_integration.id,
+    ]))
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  depends_on = [aws_api_gateway_resource.example_resource, aws_api_gateway_method.example_method, aws_api_gateway_integration.example_integration]
+}
+
+# Create API Gateway Stage
+resource "aws_api_gateway_stage" "example_stage" {
+  deployment_id = aws_api_gateway_deployment.example_deployment.id
+  rest_api_id   = aws_api_gateway_rest_api.example_api.id
+  stage_name    = "dev"
+}

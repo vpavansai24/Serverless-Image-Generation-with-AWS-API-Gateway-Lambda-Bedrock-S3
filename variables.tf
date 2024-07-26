@@ -10,6 +10,12 @@ variable "lambda_function_name" {
   default = "imageGeneratorv2"
 }
 
+variable "api_name" {
+  description = "The Name of the API"
+  type = string
+  default = "imageGeneratorAPI"
+}
+
 variable "endpoint_path" {
   description = "The Get Endpoint Path"
   type = string
